@@ -7,9 +7,9 @@ This security layer inadequately handles A/B storage for files in RepyV2.
 Note:
     This security layer uses encasementlib.r2py, restrictions.default, repy.py and Python
     Also you need to give it an application to run.
-    python repy.py restrictions.default encasementlib.r2py [security_layer].r2py [attack_program].r2py 
-    
-    """ 
+    python repy.py restrictions.default encasementlib.r2py [security_layer].r2py [attack_program].r2py
+"""
+
 TYPE="type"
 ARGS="args"
 RETURN="return"
@@ -21,55 +21,73 @@ OBJC="objc"
 class ABFile():
   def __init__(self,filename,create):
     # globals
-    mycontext['debug'] = False   
+    mycontext['debug'] = False
     # local (per object) reference to the underlying file
     self.Afn = filename+'.a'
     self.Bfn = filename+'.b'
 
-    # make the files and add 'SE' to the readat file...
+    #Create A/B Files
     if create:
-        self.Afile = openfile(self.Afn,create)
-        if self.Bfn in listfiles():
-            remove(self.Bfn);
-        self.Bfile = openfile(self.Bfn,create);  
-    
-    if self.Afile.readat(None,0) == "":
-        self.Afile.writeat('SE',0);
-
-
-    backup = self.Afile.readat(None,0);
-    self.Bfile.writeat(backup,0);
-
+      if self.Afn in listfiles():
+        self.Afile, self.Bfile = create_files(self.Afn, self.Bfn)
+        self.Bfile.writeat(self.Afile.readat(None,0),0)
+      else:
+        self.Afile, self.Bfile = create_files(self.Afn, self.Bfn)
+        self.Afile.writeat('SE', 0)
+    else:
+      if self.Afn in listfiles():
+        self.Afile, self.Bfile = create_files(self.Afn, self.Bfn)
+        self.Bfile.writeat(self.Afile.readat(None,0),0)
+    self.lock = createlock()
 
   def writeat(self,data,offset):
-    
-    # Write the requested data to the B file using the sandbox's writeat call
-    if offset >= 0 and offset <= 500 and type(data) is str:
-        self.Bfile.writeat(data,offset)
-  
-  def readat(self,bytes,offset):
-    # Read from the A file using the sandbox's readat...
-    read = ""; 
-    if offset >= 0:
-        read = self.Afile.readat(bytes,offset)
+    self.lock.acquire(True)
+    if offset < 0 or offset > len(self.Bfile.readat(None,0)) or type(data) != str:
+        self.lock.release()
+    else:
+      self.Bfile.writeat(data,offset)
+      self.lock.release()
 
-    return read
+
+  def readat(self,bytes,offset):
+    self.lock.acquire(True)
+    length = len(self.Afile.readat(None,0))
+    if length < 0:
+      self.lock.release()
+    elif offset < 0 or offset >= length:
+      self.lock.release()
+    elif bytes != None and bytes > length:
+      self.lock.release()
+    else:
+        read_data = self.Afile.readat(bytes,offset)
+        self.lock.release()
+        return read_data
 
   def close(self):
-    info = self.Bfile.readat(None,0)
-    if isValid(info):
-        self.Afile.writeat(info, 0);
-    self.Bfile.close();
-    if self.Bfn in listfiles():
-        removefile(self.Bfn);
-    self.Afile.close();
+  #rewriting these, so need to store
+    a_info = self.Afile.readat(None,0);
+    b_info = self.Bfile.readat(None,0);
+    Afn = self.Afn;
+    self.Afile.close()
+    self.Bfile.close()
+    removefile(self.Afn)
+    if isValid(b_info):
+      openfile(Afn,True).writeat(b_info,0)
+    else:
+      openfile(Afn,True).writeat(a_info,0)
+    removefile(self.Bfn)
+
 
 def ABopenfile(filename, create):
   return ABFile(filename,create)
 
 def isValid(file):
-    return len(file) >= 2 and file[0] == "S" and file[-1] == "E"
+  return len(file) >= 2 and file[0] == 'S' and file[-1] == 'E';
 
+def create_files(a,b):
+  Afile = openfile(a,True);
+  Bfile = openfile(b,True);
+  return Afile, Bfile
 
 # The code here sets up type checking and variable hiding for you.  You
 # should not need to change anything below here.
