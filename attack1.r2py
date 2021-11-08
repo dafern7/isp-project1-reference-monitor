@@ -1,17 +1,25 @@
+##REMOVE Operation
 if "testfile.txt.a" in listfiles():
   removefile("testfile.txt.a")
 if "testfile.txt.b" in listfiles():
   removefile("testfile.txt.b")
-myfile=ABopenfile("testfile.txt",True)  #Create an AB file
 
-# I should get 'SE' when reading an empty file...
-assert('SE' == myfile.readat(None,0))
+# New File Operation
+myfile=ABopenfile("testfile.txt", True)
 
-# put some valid data in the file.
-myfile.writeat("Stest12345E",0)
+def threadone():
+  #WRITE Operation
+  myfile.writeat("StestE",0)
 
-# I should still get 'SE' because the file wasn't closed.
-assert('SE' == myfile.readat(None,0))
+def threadtwo():
+  #WRITE Operation
+  myfile.writeat("StestEsecurityE",0)
 
-#Close the file
+createthread(threadone)
+createthread(threadtwo)
+myfile.close()
+
+myfile=ABopenfile("testfile.txt", True)
+if myfile.readat(None,0) == "StestEsecurityE":
+  log("ERROR ATTACK - 14 | File Altered!\n")
 myfile.close()
